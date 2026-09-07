@@ -77,6 +77,9 @@ def task_node(state: EventState) -> Dict[str, Any]:
     return {"tasks": new_tasks}
 
 
+from graph.extractor import extract_tasks_from_text, extract_guests_from_text
+
+
 def guest_node(state: EventState) -> Dict[str, Any]:
     """
     Extracts guest names and adds them to guest list using operator.add reducer.
@@ -86,25 +89,7 @@ def guest_node(state: EventState) -> Dict[str, Any]:
         return {}
 
     text = str(messages[-1].content)
-    new_guests: List[str] = []
-
-    # Pattern: "Add Rahul and Ahmed to guest list"
-    guest_match = re.search(r"(?:add|invite)\s+([A-Za-z,\s]+?)\s+(?:to (?:the )?guest list|as guests)", text, re.IGNORECASE)
-    if guest_match:
-        raw_names = guest_match.group(1)
-        names = re.split(r",|\band\b", raw_names, flags=re.IGNORECASE)
-        for n in names:
-            name_clean = n.strip()
-            if name_clean and len(name_clean) > 1:
-                new_guests.append(name_clean.capitalize())
-
-    # Direct name lists if no match
-    if not new_guests:
-        words = [w.strip(" ,.") for w in text.split()]
-        known_samples = ["Rahul", "Ahmed", "Priya", "Sara", "David", "Ananya", "Rohan"]
-        for w in words:
-            if w.capitalize() in known_samples and w.capitalize() not in new_guests:
-                new_guests.append(w.capitalize())
+    new_guests = extract_guests_from_text(text)
 
     updates: Dict[str, Any] = {}
     if new_guests:
@@ -179,6 +164,7 @@ def response_node(state: EventState) -> Dict[str, Any]:
     - Collects before/after context metrics for visible UI proof.
     - Queries LLM (Gemini or DemoChatModel fallback).
     """
+    import uuid
     messages = state.get("messages", [])
     intent = state.get("intent", "general")
     long_term = state.get("long_term_profile") or {}
@@ -240,17 +226,17 @@ def response_node(state: EventState) -> Dict[str, Any]:
         raw_res = llm.invoke(model_input)
         content = raw_res.content
         if isinstance(content, list):
-            # Extract text blocks
             text_pieces = []
             for item in content:
                 if isinstance(item, dict) and "text" in item:
                     text_pieces.append(item["text"])
                 elif isinstance(item, str):
                     text_pieces.append(item)
-        import uuid
+            cleaned_text = "\n".join(text_pieces) if text_pieces else str(content)
+        else:
+            cleaned_text = str(content)
         response = AIMessage(content=cleaned_text, id=str(uuid.uuid4()))
     except Exception as e:
-        import uuid
         response = AIMessage(content=f"Error communicating with LLM ({e}). Falling back to state response.", id=str(uuid.uuid4()))
 
     return {

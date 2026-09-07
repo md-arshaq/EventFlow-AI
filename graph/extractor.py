@@ -149,18 +149,143 @@ def extract_all_event_data(text: str) -> Dict[str, Any]:
     elif "outdoor" in text_lower:
         updates["location"] = "Outdoor Venue"
 
+def extract_guests_from_text(text: str) -> List[str]:
+    """
+    Extracts individual guest names (including full names) from:
+    - 'Add the following guests to ...: Rahul Sharma, Ananya Reddy, Mohammed Sameer, Priya Nair, and Arjun Kumar'
+    - 'Add Rahul and Ahmed to guest list'
+    - 'Invite Priya and John'
+    - Bullet points
+    """
+    guests: List[str] = []
+
+    # Format 1: "Add the following guests ... : Name 1, Name 2, and Name 3"
+    guest_section_match = re.search(
+        r"(?:add\s+(?:the\s+following\s+)?guests?(?:\s+to\s+(?:the\s+)?(?:workshop\s+|event\s+)?guest\s*list)?|guest\s*list|invite(?:es)?)\s*[:\-]\s*(.+)",
+        text,
+        re.IGNORECASE
+    )
+    if guest_section_match:
+        raw_section = guest_section_match.group(1).strip()
+        raw_section = re.split(r"(?<=[.!?])\s+[A-Z]", raw_section)[0]
+
+        if "\n" in raw_section:
+            for line in raw_section.split("\n"):
+                cleaned = re.sub(r"^[-*•\d.]+\s*", "", line).strip()
+                if cleaned and len(cleaned) > 1:
+                    guests.append(cleaned.title())
+        else:
+            parts = re.split(r",|\band\b", raw_section, flags=re.IGNORECASE)
+            for p in parts:
+                cleaned = p.strip(" \t\n\r.,;:-")
+                if cleaned and len(cleaned) > 1 and not any(kw in cleaned.lower() for kw in ["following", "guests", "workshop", "event"]):
+                    guests.append(cleaned.title())
+
+        if guests:
+            return guests
+
+    # Format 2: "Add Rahul and Ahmed to the guest list"
+    guest_match = re.search(r"(?:add|invite)\s+([A-Za-z\s,]+?)\s+(?:to (?:the )?(?:event |workshop )?guest list|as guests)", text, re.IGNORECASE)
+    if guest_match:
+        raw_names = guest_match.group(1)
+        names = re.split(r",|\band\b", raw_names, flags=re.IGNORECASE)
+        for n in names:
+            name_clean = n.strip(" \t\n\r.,;:-")
+            if name_clean and len(name_clean) > 1:
+                guests.append(name_clean.title())
+
+        if guests:
+            return guests
+
+    return guests
+
+
+def extract_all_event_data(text: str) -> Dict[str, Any]:
+    """
+    Comprehensive multi-field extractor for event details.
+    """
+    updates: Dict[str, Any] = {}
+    text_lower = text.lower()
+
+    # 1. Event Type
+    if "dsa workshop" in text_lower:
+        updates["event_type"] = "DSA Workshop"
+    elif "workshop" in text_lower:
+        updates["event_type"] = "Technical Workshop"
+    elif "birthday" in text_lower:
+        updates["event_type"] = "Birthday Party"
+    elif "college meetup" in text_lower or "meetup" in text_lower:
+        updates["event_type"] = "College Meetup"
+    elif "conference" in text_lower:
+        updates["event_type"] = "Conference"
+    elif "seminar" in text_lower:
+        updates["event_type"] = "Seminar"
+    elif "gathering" in text_lower:
+        updates["event_type"] = "Family Gathering"
+
+    # 2. Guest / Student Count (e.g. "for 50 students", "30 people", "100 attendees")
+    count_match = re.search(
+        r"(?:for|around|approx|with|capacity for|seating for)?\s*(\d+)\s*(?:students|people|guests|attendees|persons|participants|members)",
+        text,
+        re.IGNORECASE
+    )
+    if count_match:
+        try:
+            updates["guest_count"] = int(count_match.group(1))
+        except ValueError:
+            pass
+
+    # 3. Budget (e.g. "budget is ₹25,000", "₹20,000", "25000")
+    budget_match = re.search(
+        r"(?:budget|cost|spend|limit)\s*(?:is|of|around|approx)?\s*(?:₹|rs\.?|inr)?\s*(\d+[\d,.]*)",
+        text,
+        re.IGNORECASE
+    )
+    if budget_match:
+        try:
+            updates["budget"] = float(budget_match.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    # 4. Event Date (e.g. "September 25th", "December 20", "25th Jan", "2026-10-15")
+    months = r"(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    date_match = re.search(
+        rf"\b(?:on|date is|dated)?\s*({months}\s+\d{{1,2}}(?:st|nd|rd|th)?|\d{{1,2}}(?:st|nd|rd|th)?\s+{months}|\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{2,4}})\b",
+        text,
+        re.IGNORECASE
+    )
+    if date_match:
+        updates["event_date"] = date_match.group(1).strip()
+
+    # 5. Event Time & Duration (e.g. "from 10 AM to 4 PM", "at 6 PM")
+    time_match = re.search(
+        r"(?:from\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)|\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))",
+        text
+    )
+    if time_match:
+        updates["event_time"] = time_match.group(1)
+
+    # 6. Location / Venue Requirements
+    venue_match = re.search(
+        r"(?:prefer\s+(?:an?\s+)?|venue\s+is\s+|at\s+)([a-zA-Z\s]+(?:venue|hall|center|auditorium|club|campus|park|lounge|room)[^.,;]*)",
+        text,
+        re.IGNORECASE
+    )
+    if venue_match:
+        updates["location"] = venue_match.group(1).strip()
+    elif "indoor" in text_lower:
+        updates["location"] = "Indoor Venue (Projector & Wi-Fi)"
+    elif "outdoor" in text_lower:
+        updates["location"] = "Outdoor Venue"
+
     # 7. Tasks extraction
     extracted_tasks = extract_tasks_from_text(text)
     if extracted_tasks:
         updates["tasks"] = extracted_tasks
 
-    # 8. Guest Names
-    guest_match = re.search(r"(?:add|invite)\s+([A-Za-z,\s]+?)\s+(?:to (?:the )?guest list|as guests)", text, re.IGNORECASE)
-    if guest_match:
-        raw_names = guest_match.group(1)
-        names = re.split(r",|\band\b", raw_names, flags=re.IGNORECASE)
-        g_list = [n.strip().capitalize() for n in names if len(n.strip()) > 1]
-        if g_list:
-            updates["guest_list"] = g_list
+    # 8. Guest Names extraction
+    extracted_guests = extract_guests_from_text(text)
+    if extracted_guests:
+        updates["guest_list"] = extracted_guests
 
     return updates
