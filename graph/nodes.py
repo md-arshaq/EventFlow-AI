@@ -247,12 +247,11 @@ def response_node(state: EventState) -> Dict[str, Any]:
                     text_pieces.append(item["text"])
                 elif isinstance(item, str):
                     text_pieces.append(item)
-            cleaned_text = "\n".join(text_pieces) if text_pieces else str(content)
-        else:
-            cleaned_text = str(content)
-        response = AIMessage(content=cleaned_text)
+        import uuid
+        response = AIMessage(content=cleaned_text, id=str(uuid.uuid4()))
     except Exception as e:
-        response = AIMessage(content=f"Error communicating with LLM ({e}). Falling back to state response.")
+        import uuid
+        response = AIMessage(content=f"Error communicating with LLM ({e}). Falling back to state response.", id=str(uuid.uuid4()))
 
     return {
         "messages": [response],
