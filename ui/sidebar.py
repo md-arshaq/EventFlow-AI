@@ -78,7 +78,14 @@ def render_sidebar():
             st.session_state["USER_GEMINI_KEY"] = api_key_input
         model_choice = st.selectbox(
             "Model",
-            ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "DemoChatModel (Offline)"],
+            [
+                "gemini-3.1-flash-lite (500 req/day)",
+                "gemini-3.5-flash-lite (500 req/day)",
+                "gemini-3.6-flash (20 req/day)",
+                "DemoChatModel (Offline & Unlimited)"
+            ],
             index=0
         )
-        st.session_state["SELECTED_MODEL"] = model_choice
+        # Parse clean model name
+        clean_model = model_choice.split(" ")[0]
+        st.session_state["SELECTED_MODEL"] = clean_model
