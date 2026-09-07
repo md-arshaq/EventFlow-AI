@@ -72,10 +72,25 @@ def render_sidebar():
     st.sidebar.divider()
 
     # LLM Settings
-    with st.sidebar.expander("⚙️ LLM & API Configuration"):
-        api_key_input = st.text_input("Gemini API Key", type="password", help="Optional: Leave blank for offline DemoChatModel")
-        if api_key_input:
-            st.session_state["USER_GEMINI_KEY"] = api_key_input
+    with st.sidebar.expander("⚙️ LLM & API Configuration", expanded=True):
+        # Check Streamlit Cloud secrets, os.environ, or session state
+        existing_key = (
+            st.session_state.get("USER_GEMINI_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or (getattr(st, "secrets", {}).get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else "")
+            or ""
+        )
+
+        api_key_input = st.text_input(
+            "Gemini API Key",
+            value=existing_key,
+            type="password",
+            help="Required on deployed versions. Get free key from aistudio.google.com/app/apikey"
+        )
+        if api_key_input and api_key_input.strip():
+            st.session_state["USER_GEMINI_KEY"] = api_key_input.strip()
+            os.environ["GEMINI_API_KEY"] = api_key_input.strip()
+
         model_choice = st.selectbox(
             "Model",
             [
@@ -86,6 +101,13 @@ def render_sidebar():
             ],
             index=0
         )
-        # Parse clean model name
         clean_model = model_choice.split(" ")[0]
         st.session_state["SELECTED_MODEL"] = clean_model
+        os.environ["GEMINI_MODEL"] = clean_model
+
+        if "DemoChatModel" in model_choice:
+            st.info("ℹ️ Using offline DemoChatModel.")
+        elif not (os.getenv("GEMINI_API_KEY") or "").strip():
+            st.warning("⚠️ No API Key found. Paste your Gemini API key above or add it to Streamlit Secrets to enable live AI responses.")
+        else:
+            st.success(f"✅ Live Gemini Model active: `{clean_model}`")

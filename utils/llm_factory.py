@@ -57,8 +57,11 @@ def get_llm(api_key: Optional[str] = None, model_name: Optional[str] = None) -> 
     Returns configured ChatGoogleGenerativeAI instance if Gemini API key is available,
     otherwise returns DemoChatModel.
     """
-    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     model = model_name or os.getenv("GEMINI_MODEL") or "gemini-3.1-flash-lite"
+    if "demochatmodel" in model.lower():
+        return DemoChatModel()
+
+    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
     if key and key.strip():
         try:
