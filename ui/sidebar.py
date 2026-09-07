@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from memory.long_term_store import get_long_term_store
 from memory.threads_store import load_threads, add_or_update_thread
